@@ -161,44 +161,69 @@ in Stage 3), draft responses for each one.
    ```
 7. If there are no written questions, create the file with a note: "No written questions on this application."
 
-**Stage 5: Find Connections & Outreach Strategy (Ultra-Conservative)**
+**Stage 5: Find Connections & Outreach Strategy**
 
 **READ `references/linkedin-safety.md` BEFORE THIS STAGE.**
 
-Use LinkedIn's conversational people search to find 1st and 2nd degree connections at the company
-in a single page load. Construct the URL by URL-encoding the company name:
+This stage does a thorough search of Jack's network at the company. It uses two separate
+searches (1st degree, then 2nd degree) and pages through ALL 2nd-degree results to build
+a complete map before doing strategic analysis.
+
+#### Step 1: Search 1st-degree connections
+
+One page load is usually sufficient — Jack rarely has many 1st-degree connections at a
+given company.
 
 ```
-https://www.linkedin.com/search/results/people/?keywords=my%20connections%20to%20people%20who%20currently%20work%20at%20<URL-ENCODED-COMPANY-NAME>&origin=FACETED_SEARCH&network=%5B%22S%22%2C%22F%22%5D
+https://www.linkedin.com/search/results/people/?keywords=<URL-ENCODED-COMPANY-NAME>&origin=FACETED_SEARCH&network=%5B%22F%22%5D
 ```
 
-Example for "Aircall":
+1. Navigate (with safety protocol — delay + scroll)
+2. `browser_snapshot` to capture results
+3. Record every person: name, title, any visible details
+4. Navigate to `google.com` as breather
+
+#### Step 2: Search 2nd-degree connections (page through ALL results)
+
+2nd-degree connections are the primary referral pipeline. Page through every page of results
+to build the complete map.
+
 ```
-https://www.linkedin.com/search/results/people/?keywords=my%20connections%20to%20people%20who%20currently%20work%20at%20aircall&origin=FACETED_SEARCH&network=%5B%22S%22%2C%22F%22%5D
+https://www.linkedin.com/search/results/people/?keywords=<URL-ENCODED-COMPANY-NAME>&origin=FACETED_SEARCH&network=%5B%22S%22%5D
 ```
 
-This searches for both 1st (`F`) and 2nd (`S`) degree connections in one query. Past 2nd degree is useless — don't bother.
+1. Navigate to the first page (with safety protocol)
+2. `browser_snapshot` to capture results
+3. Record every person: name, title, mutual connections shown
+4. **Page through results**: Look for a "Next" button or pagination. For each additional page:
+   - Navigate to `google.com` as breather (wait 2000-3000ms)
+   - Navigate to the next page URL (with safety protocol — full delay + scroll)
+   - `browser_snapshot` and record all results
+   - Continue until no more pages or you hit the **hard cap of 8 LinkedIn page loads** for
+     this sub-step (covering ~80 results, which is comprehensive for most companies)
+5. **NEVER click into individual profiles** — only read what's visible on search results pages
+6. Navigate to `google.com` to end LinkedIn browsing
 
-Steps:
-1. Construct the search URL with the company name
-2. Navigate via browsermcp (1 page load, with full safety protocol — delay + scroll)
-3. `browser_snapshot` to capture visible connections
-4. **NEVER click into individual profiles**
-5. If results are sparse, you may do ONE additional page load to scroll/paginate, but no more
-6. Analyze the connections and build a strategic outreach plan (see Outreach Strategy below)
-7. Save findings to `jobs/<id>/connections.md` (see template below)
-8. Update tracker: `referral_contact` with top recommendation, `referral_status=identified`, advance `stage` to `connections_found`
-9. Navigate to `google.com` to end the LinkedIn session
+#### Step 3: Cross-reference with hiring team
 
-#### Outreach Strategy
+Pull in the hiring team members identified in Stage 1 (from `jobs/<id>/job-posting.md`).
+Note which hiring team members appeared in the search results and at what degree.
 
-Categorize every connection found into tiers based on their value for getting a referral:
+#### Step 4: Strategic analysis and outreach plan
+
+With the complete map of connections, do a deep analysis. For EVERY person found, assess:
+- **Relevance**: Are they on the hiring team's org? Adjacent team? Different department?
+- **Seniority**: Peer-level IC, senior IC, manager, director, VP?
+- **Connection strength**: 1st-degree (direct), or 2nd-degree (who are the mutual connections?)
+- **Outreach value**: How likely are they to be able and willing to refer?
+
+Then categorize into tiers:
 
 **Tier 1 — Warm intro through 1st-degree (highest value):**
 A 1st-degree connection who can introduce the user or submit a referral. This is almost always
 stronger than cold outreach to a 2nd-degree. A message from a mutual carries social proof
-and obligation to at least look. The mutual can also provide intel on the team, hiring
-process, and whether the role is genuinely open.
+and creates obligation to at least look. The mutual can also provide intel on the team,
+hiring process, and whether the role is genuinely open.
 
 **Tier 2 — Peer-level ICs on the same or adjacent team (best direct outreach):**
 Engineers or ICs at the user's level or one above, on the team the role belongs to or a
@@ -228,6 +253,14 @@ When writing the outreach plan:
   anything they've published or spoken about first.
 - **Always recommend applying regardless** — don't gate the application on getting a referral.
   The referral is a booster, not a prerequisite. Apply now, work connections in parallel.
+- **Rank all recommendations** — don't just pick the top 2-3. Rank every viable connection
+  so Jack can work down the list.
+
+#### Step 5: Save and update tracker
+
+Save findings to `jobs/<id>/connections.md` (see template below). Update tracker:
+`referral_contact` with top recommendation, `referral_status=identified`, advance `stage`
+to `connections_found`.
 
 #### connections.md Template
 
@@ -235,36 +268,46 @@ When writing the outreach plan:
 # Connections at <Company>
 
 ## 1st Degree Connections
-- <name> — <title> (if visible)
+- <name> — <title>
 - ...
 
-## 2nd Degree Connections
-- <name> — <title>, connected through <mutual connection if visible>
+(or "None found" if empty)
+
+## 2nd Degree Connections (complete list)
+- <name> — <title> | Mutual: <mutual connection names>
+- <name> — <title> | Mutual: <mutual connection names>
 - ...
+
+(<N> total across <M> pages of results)
 
 ## Hiring Team (from job posting)
-- <name> — <title> (<connection degree>)
+- <name> — <title> (<connection degree, if found in search>)
 
 ## Outreach Strategy
 
-### Recommended Actions (in priority order)
+### Recommended Actions (ranked by priority)
 
-**1. [Tier/approach]: [Name]**
-- Why: <why this person is a good target>
+**1. [Tier] [Approach]: [Name] — [Title]**
+- Why: <why this person is a high-value target — team relevance, seniority fit, mutual strength>
 - Approach: <specific suggested approach — what to say, how to frame it>
-- Draft message: <a short, natural-sounding message the user can adapt>
+- Draft message:
+  > <a short, natural-sounding message the user can copy and adapt>
 
-**2. [Tier/approach]: [Name]**
+**2. [Tier] [Approach]: [Name] — [Title]**
 - Why: ...
 - Approach: ...
-- Draft message: ...
+- Draft message:
+  > ...
 
-(repeat for top 2-3 recommendations)
+(continue for ALL viable connections, ranked — not just top 3)
 
-### General Notes
-- <any strategic observations — e.g., "strong mutual connection through X",
-  "hiring manager has published articles on Y that the user could reference",
-  "no strong 1st-degree path, direct peer outreach is the best bet">
+### Strategic Summary
+- Best path to referral: <1-2 sentence summary of the strongest play>
+- Backup paths: <alternative approaches if the primary doesn't pan out>
+- Key insight: <any non-obvious observation — e.g., "3 mutual connections with Person X
+  suggests a strong tie worth leveraging", "hiring manager previously worked at Company Y
+  where the user also worked", "no strong 1st-degree path — peer outreach is the best bet">
+- Reminder: Apply regardless. Referral is a booster, not a gate.
 ```
 
 **Stage 6: Finalize & Push**

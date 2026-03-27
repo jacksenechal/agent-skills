@@ -14,13 +14,18 @@ Always try `WebFetch` for job posting data before resorting to browsermcp. Job p
 often semi-public and WebFetch avoids triggering any LinkedIn automation detection.
 
 ### 2. Page Load Limits
-- **Per job**: Max 2-3 LinkedIn page loads (company page + people tab)
-- **Per session/conversation**: Max 15 total LinkedIn page loads
+- **Job posting scrape**: 1 LinkedIn page load
+- **Connection search**: Up to 10 LinkedIn page loads per job (1 for 1st-degree search,
+  up to 8 for paging through 2nd-degree results, plus breather navigations to google.com
+  which don't count)
+- **Per session/conversation**: Max 25 total LinkedIn page loads across all activities
 - Track your count mentally. When you hit the limit, STOP.
+- **Always use breather pages** (google.com) between LinkedIn page loads — these don't count
+  toward the limit but are mandatory for safety.
 
 ### 3. Never View Individual Profiles
 Do not navigate to any individual LinkedIn profile URL (linkedin.com/in/...) automatically.
-The connection search should only use the company page's "People" section, which shows
+The connection search uses search result pages only, which show
 connection summaries without triggering profile view notifications or tracking.
 
 ### 4. Mandatory Randomized Delays
@@ -82,22 +87,48 @@ accessed, check this log.
 
 ## Example Safe Connection Search Sequence
 
-Use LinkedIn's conversational people search to find 1st+2nd degree connections in one page load:
+Two separate searches: 1st-degree (usually 1 page), then 2nd-degree (page through all results).
 
 ```
-URL pattern:
-https://www.linkedin.com/search/results/people/?keywords=my%20connections%20to%20people%20who%20currently%20work%20at%20<COMPANY>&origin=FACETED_SEARCH&network=%5B%22S%22%2C%22F%22%5D
+1st-degree URL:
+https://www.linkedin.com/search/results/people/?keywords=<COMPANY>&origin=FACETED_SEARCH&network=%5B%22F%22%5D
 
-1. browser_screenshot                          # Verify browser state
-2. browser_navigate → people search URL        # Page load #1 (1st + 2nd degree)
-3. browser_wait(4700)                          # Randomized delay
-4. browser_press_key(PageDown)                 # Natural scroll
-5. browser_wait(2200)
-6. browser_press_key(PageDown)
-7. browser_wait(1800)
-8. browser_snapshot                            # Read connections
-9. browser_navigate → google.com              # Clean exit
+2nd-degree URL:
+https://www.linkedin.com/search/results/people/?keywords=<COMPANY>&origin=FACETED_SEARCH&network=%5B%22S%22%5D
+
+--- 1st degree search ---
+1.  browser_screenshot                          # Verify browser state
+2.  browser_navigate → 1st-degree search URL    # LI page load #1
+3.  browser_wait(4700)                          # Randomized delay
+4.  browser_press_key(PageDown)                 # Natural scroll
+5.  browser_wait(2200)
+6.  browser_press_key(PageDown)
+7.  browser_wait(1800)
+8.  browser_snapshot                            # Read 1st-degree results
+9.  browser_navigate → google.com               # Breather
+10. browser_wait(2500)
+
+--- 2nd degree search, page 1 ---
+11. browser_navigate → 2nd-degree search URL    # LI page load #2
+12. browser_wait(5300)
+13. browser_press_key(PageDown) + waits          # Natural scroll
+14. browser_snapshot                            # Read results
+15. browser_navigate → google.com               # Breather
+16. browser_wait(3100)
+
+--- 2nd degree search, page 2 (if more results) ---
+17. browser_navigate → next page URL            # LI page load #3
+18. browser_wait(6100)
+19. browser_press_key(PageDown) + waits
+20. browser_snapshot
+21. browser_navigate → google.com               # Breather
+
+(repeat for each page, up to 8 LI page loads for 2nd-degree)
+
+--- done ---
+22. browser_navigate → google.com               # Clean exit
 ```
 
-Total LinkedIn page loads: 1. Total time: ~15 seconds of natural-looking browsing.
-Past 2nd degree connections is useless — don't bother with 3rd+ degree searches.
+Total LinkedIn page loads: 1 (1st-degree) + N (2nd-degree pages, max 8) = up to 9 per job.
+Each page shows ~10 results, so 8 pages covers ~80 2nd-degree connections.
+Past 2nd degree is useless — don't bother with 3rd+ degree searches.
