@@ -18,10 +18,10 @@ walks away, and comes back to a fully prepared application package.
 
 ## Project Locations
 
-- **Job search repo**: `/home/jack/workspace/job-search/` (private GitHub repo)
-- **Tracker**: `/home/jack/workspace/job-search/tracker.csv`
-- **Job research**: `/home/jack/workspace/job-search/jobs/<id>/`
-- **Resume repo**: `/home/jack/workspace/resume/` (separate git repo)
+- **Job search repo**: `~/workspace/job-search/` (private GitHub repo)
+- **Tracker**: `~/workspace/job-search/tracker.csv`
+- **Job research**: `~/workspace/job-search/jobs/<id>/`
+- **Resume repo**: `~/workspace/resume/` (separate git repo)
 - **LinkedIn safety rules**: See `references/linkedin-safety.md` — READ THIS before any LinkedIn browsing
 
 ## Sub-Commands
@@ -34,7 +34,7 @@ pausing for user input. Each stage updates the tracker CSV.
 **Stage 1: Discover & Research**
 
 1. Generate an `id` slug from the company and role (e.g., `stripe-infra-eng`, `aircall-ai-productivity-eng`). Keep it short, semantic, and unique against existing tracker rows. Do NOT ask the user to confirm — just pick a good one.
-2. Create directory `/home/jack/workspace/job-search/jobs/<id>/`
+2. Create directory `~/workspace/job-search/jobs/<id>/`
 3. Add a row to `tracker.csv` with `stage=discovered`, `date_found` = today
 4. Scrape the job posting:
    - **Use browsermcp `browser_snapshot` as the primary method.** Navigate to the LinkedIn URL
@@ -72,7 +72,7 @@ pausing for user input. Each stage updates the tracker CSV.
 
 **Stage 2: Tailor Resume**
 
-1. `cd /home/jack/workspace/resume`
+1. `cd ~/workspace/resume`
 2. `git fetch --all --prune`
 3. List remote branches (`git branch -r`) to find the closest `role/` archetype branch.
    Pick the best match based on the job description — do not ask the user.
@@ -133,7 +133,7 @@ in Stage 3), draft responses for each one.
 1. Read `jobs/<id>/application-form.md` for the questions
 2. Read `jobs/<id>/job-posting.md` for context on what the company values
 3. Read the tailored `resume.md` from the resume branch for the user's background
-4. Read `/home/jack/workspace/resume/CONTEXT.md` for factual constraints
+4. Read `~/workspace/resume/CONTEXT.md` for factual constraints
 5. Draft responses that are:
    - Authentic and specific to the user's experience (not generic)
    - Tailored to the role and company
@@ -278,14 +278,14 @@ When writing the outreach plan:
 2. Update tracker: advance `stage` to `ready_to_apply`
 3. Commit and push everything in the job-search repo:
    ```bash
-   cd /home/jack/workspace/job-search
+   cd ~/workspace/job-search
    git add -A
    git commit -m "Add <company> <role> application package"
    git push
    ```
 4. Ensure resume branch was pushed (should have been in Stage 2, but verify):
    ```bash
-   cd /home/jack/workspace/resume
+   cd ~/workspace/resume
    git push -u origin job/<id>
    ```
 5. Print a final summary:
@@ -320,7 +320,7 @@ When writing the outreach plan:
 6. Write back to CSV
 7. Commit and push:
    ```bash
-   cd /home/jack/workspace/job-search
+   cd ~/workspace/job-search
    git add tracker.csv
    git commit -m "Update <id> stage to <stage>"
    git push
@@ -332,11 +332,11 @@ Pull the latest state of both repos so work can resume from any machine.
 
 ```bash
 # Pull job-search repo
-cd /home/jack/workspace/job-search
+cd ~/workspace/job-search
 git pull --rebase
 
 # Pull resume repo (fetch all branches including job/* branches)
-cd /home/jack/workspace/resume
+cd ~/workspace/resume
 git fetch --all --prune
 git pull --rebase
 ```
@@ -351,7 +351,7 @@ Print a summary of current tracker state after sync.
 # Read and display tracker
 python3 -c "
 import csv, sys
-with open('/home/jack/workspace/job-search/tracker.csv') as f:
+with open('~/workspace/job-search/tracker.csv') as f:
     reader = csv.DictReader(f)
     for row in reader:
         print(dict(row))
@@ -367,7 +367,7 @@ row = {
     'company': 'PLACEHOLDER',
     # ... fill all fields
 }
-with open('/home/jack/workspace/job-search/tracker.csv', 'a', newline='') as f:
+with open('~/workspace/job-search/tracker.csv', 'a', newline='') as f:
     writer = csv.DictWriter(f, fieldnames=['id','company','role','url','stage','resume_branch','role_branch','application_url','referral_contact','referral_status','date_found','date_applied','date_updated','notes'])
     writer.writerow(row)
 "
@@ -378,7 +378,7 @@ with open('/home/jack/workspace/job-search/tracker.csv', 'a', newline='') as f:
 python3 -c "
 import csv
 rows = []
-with open('/home/jack/workspace/job-search/tracker.csv') as f:
+with open('~/workspace/job-search/tracker.csv') as f:
     reader = csv.DictReader(f)
     fieldnames = reader.fieldnames
     for row in reader:
@@ -386,7 +386,7 @@ with open('/home/jack/workspace/job-search/tracker.csv') as f:
             row['stage'] = 'NEW_STAGE'
             row['date_updated'] = 'TODAY'
         rows.append(row)
-with open('/home/jack/workspace/job-search/tracker.csv', 'w', newline='') as f:
+with open('~/workspace/job-search/tracker.csv', 'w', newline='') as f:
     writer = csv.DictWriter(f, fieldnames=fieldnames)
     writer.writeheader()
     writer.writerows(rows)
@@ -396,7 +396,7 @@ with open('/home/jack/workspace/job-search/tracker.csv', 'w', newline='') as f:
 ## Application Form Defaults
 
 Personal details for pre-filling application forms are stored in the **private** job-search
-repo at `/home/jack/workspace/job-search/profile.md`. Read that file before filling any
+repo at `~/workspace/job-search/profile.md`. Read that file before filling any
 application form. It contains contact info, links, work authorization, EEO responses, and
 other standard fields.
 
