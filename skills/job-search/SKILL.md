@@ -165,13 +165,13 @@ in Stage 3), draft responses for each one.
 
 **READ `references/linkedin-safety.md` BEFORE THIS STAGE.**
 
-This stage does a thorough search of Jack's network at the company. It uses two separate
+This stage does a thorough search of the user's network at the company. It uses two separate
 searches (1st degree, then 2nd degree) and pages through ALL 2nd-degree results to build
 a complete map before doing strategic analysis.
 
 #### Step 1: Search 1st-degree connections
 
-One page load is usually sufficient — Jack rarely has many 1st-degree connections at a
+One page load is usually sufficient — the user rarely has many 1st-degree connections at a
 given company.
 
 ```
@@ -254,7 +254,7 @@ When writing the outreach plan:
 - **Always recommend applying regardless** — don't gate the application on getting a referral.
   The referral is a booster, not a prerequisite. Apply now, work connections in parallel.
 - **Rank all recommendations** — don't just pick the top 2-3. Rank every viable connection
-  so Jack can work down the list.
+  so the user can work down the list.
 
 #### Step 5: Save and update tracker
 
