@@ -1,6 +1,6 @@
 # Tracker CSV Schema
 
-File: `/home/jack/workspace/job-search/tracker.csv`
+File: `~/workspace/job-search/tracker.csv`
 
 ## Fields
 

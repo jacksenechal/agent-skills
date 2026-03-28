@@ -24,6 +24,24 @@ walks away, and comes back to a fully prepared application package.
 - **Resume repo**: `~/workspace/resume/` (separate git repo)
 - **LinkedIn safety rules**: See `references/linkedin-safety.md` — READ THIS before any LinkedIn browsing
 
+## Browser Automation
+
+This skill requires an MCP server providing Playwright-style browser tools
+(`browser_navigate`, `browser_snapshot`, `browser_click`, `browser_type`, etc.). Two
+options are supported — see `references/browser-setup.md` for detailed setup instructions:
+
+- **browsermcp** — Controls the user's real desktop browser. Simplest setup. Cannot do
+  file uploads (user must upload resume manually).
+- **Dockerized Playwright + noVNC** — Headless Chromium in a Docker container with noVNC
+  for monitoring. Supports programmatic file uploads, persistent LinkedIn sessions, and
+  container isolation. Recommended for full automation.
+
+Run `/job-search setup` to configure browser automation for a new installation.
+
+Throughout this skill, browser tool calls (e.g., `browser_snapshot`, `browser_click`) work
+identically regardless of which option is configured. The only behavioral difference is
+file uploads — see the Form-Filling Strategy section.
+
 ## Sub-Commands
 
 ### `add <linkedin-url>` — Process a new job
@@ -37,7 +55,7 @@ pausing for user input. Each stage updates the tracker CSV.
 2. Create directory `~/workspace/job-search/jobs/<id>/`
 3. Add a row to `tracker.csv` with `stage=discovered`, `date_found` = today
 4. Scrape the job posting:
-   - **Use browsermcp `browser_snapshot` as the primary method.** Navigate to the LinkedIn URL
+   - **Use `browser_snapshot` as the primary method.** Navigate to the LinkedIn URL
      following the safety protocol, then `browser_snapshot` to capture the full accessibility tree.
      This returns complete, verbatim text — every section, bullet, comp, benefits — with no
      summarization. It also captures external application URLs (e.g., Lever, Greenhouse links)
@@ -97,7 +115,7 @@ pausing for user input. Each stage updates the tracker CSV.
    - `WebFetch` the application page
    - If it's a job board (Greenhouse, Lever, Workday, etc.), document all form fields
 2. If no `application_url`:
-   - Use browsermcp to navigate to the LinkedIn job page (following safety protocol)
+   - Use browser tools to navigate to the LinkedIn job page (following safety protocol)
    - Look for "Apply" button and identify where it leads
    - If external, capture the URL and fetch that page
 3. Save to `jobs/<id>/application-form.md`:
@@ -381,6 +399,50 @@ git pull --rebase
 
 Print a summary of current tracker state after sync.
 
+### `setup` — Configure browser automation
+
+Walk the user through choosing and configuring their browser MCP server. Read
+`references/browser-setup.md` for the full setup instructions, then:
+
+1. Ask the user which option they prefer:
+   - **browsermcp** — Simpler, uses their real browser. No file uploads.
+   - **Dockerized Playwright + noVNC** — Full automation including file uploads. Requires Docker.
+2. Walk them through the setup steps from the reference doc for their chosen option.
+3. Verify the MCP server is working by calling `browser_navigate` to `https://google.com`
+   and confirming `browser_snapshot` returns content.
+4. If using Docker: confirm noVNC is accessible at http://localhost:6080.
+5. Create `~/workspace/job-search/profile.md` if it doesn't exist, with the template:
+   ```markdown
+   # Application Profile
+
+   Personal details for pre-filling job application forms.
+
+   ## Contact & Links
+
+   | Field | Value |
+   |---|---|
+   | Full name | |
+   | Email | |
+   | Phone | |
+   | Location | |
+   | Current company | |
+   | LinkedIn | |
+   | GitHub | |
+   | Website | |
+
+   ## Work Authorization
+
+   - Authorized to work in the US: **Yes/No**
+   - Requires sponsorship now or in the future: **Yes/No**
+
+   ## EEO (voluntary)
+
+   - Gender:
+   - Race:
+   - Veteran status:
+   ```
+6. Ask the user to fill in their details (or confirm existing ones).
+
 ## CSV Read/Write
 
 **Always use Python for CSV operations** to handle quoting correctly:
@@ -440,21 +502,24 @@ other standard fields.
 
 **NEVER put personal details in this skill file** — it lives in a public repo.
 
-### Form-Filling Strategy with browsermcp
+### Form-Filling Strategy
 
-1. **Resume upload**: browsermcp cannot do file uploads. Prompt the user to upload
-   `resume.pdf` from the resume branch manually.
+1. **Resume upload**:
+   - **Dockerized Playwright**: Use the `browser_file_upload` tool with the file path
+     `/home/pwuser/resume/resume.pdf` (the resume repo is mounted into the container).
+   - **browsermcp**: Cannot do file uploads. Prompt the user to upload `resume.pdf` manually.
 2. **"Apply with LinkedIn" button**: If present on a Lever/Greenhouse form, clicking this
    can prefill name, email, phone, location, company, and LinkedIn URL — saving significant
-   time. However, it triggers an OAuth popup that may not work reliably through browsermcp.
-   Worth trying first; fall back to manual field entry if it fails.
-3. **Dropdowns**: Lever's custom location dropdown doesn't work with `browser_select_option`.
-   Use the click-then-ArrowDown-key approach instead (click the combobox, press ArrowDown to
-   select the desired option). Standard HTML `<select>` elements (like EEO dropdowns) do
-   work with `browser_select_option` using the visible option text as the value.
+   time. However, it triggers an OAuth popup that may not work reliably. Worth trying first;
+   fall back to manual field entry if it fails.
+3. **Dropdowns**: Lever's custom dropdowns (combobox style) don't work with
+   `browser_select_option`. Use click-then-ArrowDown-key instead (click the combobox, press
+   ArrowDown to navigate, Enter to select). Standard HTML `<select>` elements (like EEO
+   dropdowns) do work with `browser_select_option` using the visible option text as the value.
 4. **Location autocomplete**: Lever's location field is a Google Places autocomplete. Type
    the city name only (e.g., "Portland"), wait for suggestions to load, then press ArrowDown
-   and Enter to select.
+   and Enter to select. Typing the full "City, State" often causes the autocomplete to clear
+   on blur.
 5. **Stale refs**: After each `browser_type` or `browser_click`, the page snapshot refs
    update. Always use refs from the most recent snapshot — parallel field fills will fail
    with stale ref errors. Fill fields sequentially.
@@ -462,7 +527,7 @@ other standard fields.
 ## Important Rules
 
 1. **Run end-to-end without pausing.** Do not stop to ask for user confirmation between stages. The user reviews everything after the pipeline completes.
-2. **LinkedIn safety is non-negotiable.** Read `references/linkedin-safety.md` before any browsermcp interaction with LinkedIn.
+2. **LinkedIn safety is non-negotiable.** Read `references/linkedin-safety.md` before any browser interaction with LinkedIn.
 3. **Never automate** connection requests, messages, or application submissions on LinkedIn.
 4. **Always read `resume/CONTEXT.md`** before modifying resume content.
 5. **Use `_publish`** after every resume edit, and commit the generated artifacts.

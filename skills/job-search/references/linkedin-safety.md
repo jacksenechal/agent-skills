@@ -2,16 +2,15 @@
 
 **Getting banned from LinkedIn would be catastrophic. These rules are non-negotiable.**
 
-browsermcp controls the user's real Chrome browser with their real LinkedIn session. This means
-browser fingerprinting is not a concern — but behavioral detection absolutely is. LinkedIn
-monitors for automation through timing patterns, repetitive access, and unnatural browsing
-behavior.
+The browser automation MCP server controls a browser with the user's real LinkedIn session.
+LinkedIn monitors for automation through timing patterns, repetitive access, and unnatural
+browsing behavior. Behavioral detection is the primary risk.
 
 ## Rules
 
 ### 1. WebFetch First
-Always try `WebFetch` for job posting data before resorting to browsermcp. Job postings are
-often semi-public and WebFetch avoids triggering any LinkedIn automation detection.
+Always try `WebFetch` for job posting data before resorting to browser automation. Job postings
+are often semi-public and WebFetch avoids triggering any LinkedIn automation detection.
 
 ### 2. Page Load Limits
 - **Job posting scrape**: 1 LinkedIn page load
@@ -69,7 +68,7 @@ If a `browser_snapshot` or `browser_screenshot` reveals:
 - Any security checkpoint
 
 **Immediately:**
-1. Stop ALL LinkedIn browsermcp operations for the rest of the session
+1. Stop ALL LinkedIn browser operations for the rest of the session
 2. Navigate to `google.com`
 3. Alert the user with a clear warning
 4. Do NOT attempt to solve or bypass the challenge
@@ -78,12 +77,12 @@ If a `browser_snapshot` or `browser_screenshot` reveals:
 - At the start of any LinkedIn browsing, take a `browser_screenshot` first to verify
   the browser is in a normal state (logged in, no warnings)
 - At the end of LinkedIn browsing, navigate to `google.com` to cleanly exit
-- Never leave a LinkedIn page open in the background while doing other browsermcp work
+- Never leave a LinkedIn page open in the background while doing other browser work
 
 ### 10. Audit Trail
-All browser navigations are logged to `/home/jack/workspace/job-search/linkedin-audit.log`
-by a hook. This creates accountability. If the user asks how many LinkedIn pages were
-accessed, check this log.
+If configured, browser navigations can be logged to `~/workspace/job-search/linkedin-audit.log`
+via a Claude Code hook. This creates accountability. If the user asks how many LinkedIn pages
+were accessed, check this log.
 
 ## Example Safe Connection Search Sequence
 
