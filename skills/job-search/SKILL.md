@@ -37,6 +37,7 @@ options are supported — see `references/browser-setup.md` for detailed setup i
   container isolation. Recommended for full automation.
 
 Run `/job-search setup` to configure browser automation for a new installation.
+Run `/job-search-kg setup` to configure the LinkedIn connection knowledge graph (needed for Stage 5 warmth scores).
 
 Throughout this skill, browser tool calls (e.g., `browser_snapshot`, `browser_click`) work
 identically regardless of which option is configured. The only behavioral difference is
@@ -217,17 +218,39 @@ is significantly more useful than a plain company name search.
 5. **NEVER click into individual profiles** — only read what's visible on search results pages
 6. Navigate to `google.com` to end LinkedIn browsing
 
-#### Step 2: Cross-reference with hiring team
+#### Step 2: Pull warmth scores from Knowledge Graph
+
+Before doing any strategic analysis, query the local KG to get warmth scores for 1st-degree
+connections at this company:
+
+```bash
+python3 ~/workspace/agent-tools/skills/job-search-kg/scripts/query_connections.py "<Company Name>"
+```
+
+(See the `job-search-kg` sub-skill for knowledge graph setup and ingestion.)
+
+This returns 1st-degree connections currently listed at the company, ranked by warmth score.
+Use these scores to calibrate Tier 1 assignments in the next step:
+- **Score > 20**: genuinely warm — real interaction history, high likelihood of response
+- **Score 10–20**: mild warmth — some tenure or occasional contact, treat as a soft tie
+- **Score < 10**: cold — 1st-degree in name only, treat like a 2nd-degree for outreach purposes
+
+If the query returns no results, that's expected — it only matches connections who currently
+list the company name exactly as it appears in their LinkedIn profile. The LinkedIn live
+search (Step 1) is authoritative for who's actually there.
+
+#### Step 3: Cross-reference with hiring team
 
 Pull in the hiring team members identified in Stage 1 (from `jobs/<id>/job-posting.md`).
 Note which hiring team members appeared in the search results and at what degree.
 
-#### Step 3: Strategic analysis and outreach plan
+#### Step 4: Strategic analysis and outreach plan
 
-With the complete map of connections, do a deep analysis. For EVERY person found, assess:
+With the complete map of connections and warmth scores in hand, do a deep analysis.
+For EVERY person found, assess:
 - **Relevance**: Are they on the hiring team's org? Adjacent team? Different department?
 - **Seniority**: Peer-level IC, senior IC, manager, director, VP?
-- **Connection strength**: 1st-degree (direct), or 2nd-degree (who are the mutual connections?)
+- **Connection strength**: 1st-degree (direct, with warmth score from KG), or 2nd-degree (who are the mutual connections?)
 - **Outreach value**: How likely are they to be able and willing to refer?
 
 Then categorize into tiers:
@@ -398,6 +421,57 @@ git pull --rebase
 ```
 
 Print a summary of current tracker state after sync.
+
+### `init` — Bootstrap a new job search repo
+
+Create a fresh job search directory from scratch. Run this once when setting up on a
+new machine or for a new user.
+
+1. Create the repo directory: `mkdir -p ~/workspace/job-search`
+2. Initialize git: `cd ~/workspace/job-search && git init`
+3. Create the tracker CSV with headers only:
+   ```bash
+   echo "id,company,role,url,stage,resume_branch,role_branch,application_url,referral_contact,referral_status,date_found,date_applied,date_updated,notes" > tracker.csv
+   ```
+4. Create required directories:
+   ```bash
+   mkdir -p jobs data/linkedin
+   ```
+5. Create `CLAUDE.md` with this content:
+   ```markdown
+   # Job Search Pipeline
+
+   ## Key Paths
+   - **Tracker**: `~/workspace/job-search/tracker.csv`
+   - **Resume repo**: `~/workspace/resume/`
+   - **Job research**: `~/workspace/job-search/jobs/<id>/`
+
+   ## LinkedIn Safety — CRITICAL
+   See the `job-search` skill's `references/linkedin-safety.md` for full protocol.
+
+   ## Knowledge Graph (ArcadeDB)
+   - **LinkedIn export data**: `data/linkedin/` (Connections.csv, Messages.csv, Positions.csv, Education.csv)
+   - **Setup & scripts**: See the `job-search-kg` skill
+   ```
+6. Create `profile.md` with the template (see `setup` sub-command below)
+7. Create an initial git commit:
+   ```bash
+   git add -A && git commit -m "Initialize job search pipeline"
+   ```
+8. Prompt the user to create a private GitHub repo and push:
+   ```bash
+   gh repo create job-search --private --source=. --push
+   ```
+   Or manually: add remote and push.
+9. Print next steps:
+   ```
+   Job search repo initialized at ~/workspace/job-search
+
+   Next steps:
+   1. Run /job-search setup   — configure browser automation
+   2. Run /job-search-kg setup — set up connection knowledge graph (requires LinkedIn export)
+   3. Run /job-search add <linkedin-url>  — start processing jobs
+   ```
 
 ### `setup` — Configure browser automation
 

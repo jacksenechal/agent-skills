@@ -1,0 +1,15 @@
+services:
+  arcadedb:
+    image: arcadedata/arcadedb:latest
+    container_name: arcadedb
+    ports:
+      - "2480:2480" # HTTP REST API
+      - "2424:2424" # Binary protocol
+    volumes:
+      - arcadedb-data:/home/arcadedb/databases
+    environment:
+      - JAVA_OPTS=-Darcadedb.server.rootPassword=playwithdata
+    restart: unless-stopped
+
+volumes:
+  arcadedb-data:
