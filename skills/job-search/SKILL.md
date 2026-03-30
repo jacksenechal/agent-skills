@@ -3,8 +3,10 @@ name: job-search
 description: >
   Job application pipeline management. Process LinkedIn job URLs, tailor resumes,
   prep applications, find referral connections, and track pipeline status.
+  Includes LinkedIn connection knowledge graph (ArcadeDB) for warmth-ranked outreach.
   Triggers on: job URLs, "apply to", "tailor resume for", "find connections at",
-  "job tracker", "application status", "job search", or any job pipeline tasks.
+  "job tracker", "application status", "job search", "knowledge graph", "warmth score",
+  "ingest linkedin", or any job pipeline tasks.
 ---
 
 # Job Search Pipeline Skill
@@ -13,8 +15,7 @@ You are managing the user's job application pipeline. This skill orchestrates th
 workflow from LinkedIn job URL to ready-to-apply state.
 
 **Run the entire pipeline end-to-end without stopping for user confirmation.** The user
-will review artifacts after the run completes. The goal is: user provides a LinkedIn URL,
-walks away, and comes back to a fully prepared application package.
+will review artifacts after the run completes.
 
 ## Project Locations
 
@@ -27,45 +28,35 @@ walks away, and comes back to a fully prepared application package.
 ## Browser Automation
 
 This skill requires an MCP server providing Playwright-style browser tools
-(`browser_navigate`, `browser_snapshot`, `browser_click`, `browser_type`, etc.). Two
-options are supported — see `references/browser-setup.md` for detailed setup instructions:
+(`browser_navigate`, `browser_snapshot`, `browser_click`, `browser_type`, etc.).
 
-- **browsermcp** — Controls the user's real desktop browser. Simplest setup. Cannot do
-  file uploads (user must upload resume manually).
-- **Dockerized Playwright + noVNC** — Headless Chromium in a Docker container with noVNC
-  for monitoring. Supports programmatic file uploads, persistent LinkedIn sessions, and
-  container isolation. Recommended for full automation.
+- **browsermcp** — Controls the user's real desktop browser. Simplest setup. Cannot do file uploads.
+- **Dockerized Playwright + noVNC** — Headless Chromium in Docker. Supports file uploads, persistent LinkedIn sessions. Recommended for full automation.
 
-Run `/job-search setup` to configure browser automation for a new installation.
-Run `/job-search-kg setup` to configure the LinkedIn connection knowledge graph (needed for Stage 5 warmth scores).
+Run `/job-search setup` to configure. See `references/browser-setup.md` for detailed setup instructions.
 
-Throughout this skill, browser tool calls (e.g., `browser_snapshot`, `browser_click`) work
-identically regardless of which option is configured. The only behavioral difference is
-file uploads — see the Form-Filling Strategy section.
+## Knowledge Graph
+
+A local ArcadeDB graph of LinkedIn connections ranked by warmth. Used in Stage 5 to
+prioritize outreach. Run `/job-search kg setup` to initialize.
+See `references/knowledge-graph.md` for setup, schema, warmth algorithm, and query patterns.
 
 ## Sub-Commands
 
 ### `add <linkedin-url>` — Process a new job
 
-Walk through the full pipeline for a new job posting. Run all stages end-to-end without
-pausing for user input. Each stage updates the tracker CSV.
+Walk through the full pipeline for a new job posting end-to-end.
 
 **Stage 1: Discover & Research**
 
-1. Generate an `id` slug from the company and role (e.g., `stripe-infra-eng`, `aircall-ai-productivity-eng`). Keep it short, semantic, and unique against existing tracker rows. Do NOT ask the user to confirm — just pick a good one.
-2. Create directory `~/workspace/job-search/jobs/<id>/`
-3. Add a row to `tracker.csv` with `stage=discovered`, `date_found` = today
+1. Generate an `id` slug (e.g., `stripe-infra-eng`, `aircall-ai-eng`). Short, semantic, unique. Do NOT ask the user.
+2. Create `~/workspace/job-search/jobs/<id>/`
+3. Add row to `tracker.csv`: `stage=discovered`, `date_found=today`
 4. Scrape the job posting:
-   - **Use `browser_snapshot` as the primary method.** Navigate to the LinkedIn URL
-     following the safety protocol, then `browser_snapshot` to capture the full accessibility tree.
-     This returns complete, verbatim text — every section, bullet, comp, benefits — with no
-     summarization. It also captures external application URLs (e.g., Lever, Greenhouse links)
-     and hiring team info that WebFetch misses.
-   - `WebFetch` is a fallback only — it summarizes content despite instructions not to, and
-     misses application URLs and hiring team details.
-   - Parse out: company name, role title, full job description, external application URL
-     (if present), location, requirements, **hiring team members** (names, titles, degree of connection)
-5. Save the full job description to `jobs/<id>/job-posting.md` with this structure:
+   - **Use `browser_snapshot` as the primary method.** Navigate following the safety protocol, then snapshot to capture the full accessibility tree — verbatim text, application URLs, hiring team. No summarization.
+   - `WebFetch` is a fallback only — it summarizes and misses application URLs and hiring team.
+   - Parse: company, role, full description, external application URL, location, requirements, hiring team (names, titles, connection degree)
+5. Save to `jobs/<id>/job-posting.md`:
    ```markdown
    # <Company> — <Role>
 
@@ -76,49 +67,36 @@ pausing for user input. Each stage updates the tracker CSV.
 
    ## Hiring Team
    - <name> — <title> (<connection degree>)
-   - ...
 
    ## Job Description
-   <full description — verbatim from snapshot, not summarized>
+   <full description — verbatim from snapshot>
 
    ## Key Requirements
-   <bulleted list of requirements extracted from description>
+   <bulleted list>
 
    ## Notes
-   <any initial observations about fit, concerns, etc.>
+   <initial observations on fit, concerns>
    ```
-6. Update tracker: fill in `company`, `role`, `application_url`, advance `stage` to `researched`
+6. Update tracker: `company`, `role`, `application_url`, `stage=researched`
 
 **Stage 2: Tailor Resume**
 
-1. `cd ~/workspace/resume`
-2. `git fetch --all --prune`
-3. List remote branches (`git branch -r`) to find the closest `role/` archetype branch.
-   Pick the best match based on the job description — do not ask the user.
-4. Create branch `job/<id>` from the chosen base: `git checkout -b job/<id> origin/<base-branch>`
-5. Read `CONTEXT.md` — respect all factual constraints
-6. Read `resume.md` and the saved job description from `jobs/<id>/job-posting.md`
-7. Tailor `resume.md`:
-   - Adjust the Summary to emphasize relevant experience
-   - Reorder and emphasize Professional Experience bullets
-   - Update Skills section to match job requirements
-   - Compress less-relevant experience
-   - Keep ATS-friendly formatting (see `resume/AGENTS.md`)
-8. Run `./_publish` to generate HTML and PDF
-9. `git add -A && git commit -m "Tailor resume for <company> <role>"`
-10. Push the resume branch: `git push -u origin job/<id>`
-11. Open PDF: `xdg-open resume.pdf`
-12. Update tracker: `resume_branch=job/<id>`, `role_branch=<base>`, advance `stage` to `resume_tailored`
+1. `cd ~/workspace/resume && git fetch --all --prune`
+2. List remote branches (`git branch -r`), find the closest `role/` archetype. Do not ask the user.
+3. Create branch: `git checkout -b job/<id> origin/<base-branch>`
+4. Read `CONTEXT.md` — respect all factual constraints
+5. Read `resume.md` and the saved job description
+6. Tailor `resume.md`: adjust Summary, reorder/emphasize bullets, update Skills, compress less-relevant experience. Keep ATS-friendly formatting (see `resume/AGENTS.md`)
+7. Run `./_publish` to generate HTML and PDF
+8. `git add -A && git commit -m "Tailor resume for <company> <role>"`
+9. `git push -u origin job/<id>`
+10. `xdg-open resume.pdf`
+11. Update tracker: `resume_branch=job/<id>`, `role_branch=<base>`, `stage=resume_tailored`
 
 **Stage 3: Prep Application**
 
-1. If `application_url` exists in tracker:
-   - `WebFetch` the application page
-   - If it's a job board (Greenhouse, Lever, Workday, etc.), document all form fields
-2. If no `application_url`:
-   - Use browser tools to navigate to the LinkedIn job page (following safety protocol)
-   - Look for "Apply" button and identify where it leads
-   - If external, capture the URL and fetch that page
+1. If `application_url` exists: `WebFetch` the page, identify all form fields
+2. If not: use browser tools to find the Apply button and capture the URL
 3. Save to `jobs/<id>/application-form.md`:
    ```markdown
    # Application Form — <Company> <Role>
@@ -128,246 +106,89 @@ pausing for user input. Each stage updates the tracker CSV.
 
    ## Required Fields
    - <field name>: <type> — <notes>
-   - ...
 
    ## Optional Fields
-   - ...
+   ...
 
    ## Questions / Essays
    - <question text>
-   - ...
 
    ## Uploads Required
    - Resume (PDF)
    - Cover letter? (yes/no)
-   - Other: ...
    ```
-4. Update tracker: `application_url` if newly found, advance `stage` to `application_prepped`
+4. Update tracker: `application_url` if newly found, `stage=application_prepped`
 
 **Stage 4: Draft Application Responses**
 
-If the application form includes written questions, essays, or free-text fields (identified
-in Stage 3), draft responses for each one.
+For any written questions or essays identified in Stage 3:
 
-1. Read `jobs/<id>/application-form.md` for the questions
-2. Read `jobs/<id>/job-posting.md` for context on what the company values
-3. Read the tailored `resume.md` from the resume branch for the user's background
-4. Read `~/workspace/resume/CONTEXT.md` for factual constraints
-5. Draft responses that are:
-   - Authentic and specific to the user's experience (not generic)
-   - Tailored to the role and company
-   - Concise but substantive
-   - Honest about experience level (per CONTEXT.md constraints)
-6. Save to `jobs/<id>/application-responses.md`:
-   ```markdown
-   # Application Responses — <Company> <Role>
-
-   Ready for review. Edit as needed before submitting.
-
-   ---
-
-   ## Q: <question text>
-
-   <drafted response>
-
-   ---
-
-   ## Q: <next question>
-
-   <drafted response>
-
-   ---
-   ```
-7. If there are no written questions, create the file with a note: "No written questions on this application."
+1. Read `jobs/<id>/application-form.md`, `jobs/<id>/job-posting.md`, tailored `resume.md`, and `~/workspace/resume/CONTEXT.md`
+2. Draft responses: specific to the user's experience, tailored to role and company, concise, honest per CONTEXT.md constraints
+3. Save to `jobs/<id>/application-responses.md` with each question clearly labeled. If no written questions, note that.
 
 **Stage 5: Find Connections & Outreach Strategy**
 
 **READ `references/linkedin-safety.md` BEFORE THIS STAGE.**
 
-This stage does a thorough search of the user's network at the company using LinkedIn's
-semantic search, then pages through all results to build a complete map before doing
-strategic analysis.
-
 #### Step 1: Search connections via semantic query
 
-Use a single conversational search that leverages LinkedIn's semantic search engine to find
-both 1st and 2nd degree connections who currently work at the company. Construct the URL:
+Use a single conversational search that finds 1st and 2nd degree connections at the company:
 
 ```
-https://www.linkedin.com/search/results/people/?keywords=my%20connections%20who%20currently%20work%20at%20<URL-ENCODED-COMPANY-NAME>&origin=FACETED_SEARCH&network=%5B%22F%22%2C%22S%22%5D
+https://www.linkedin.com/search/results/people/?keywords=my%20connections%20who%20currently%20work%20at%20<URL-ENCODED-COMPANY>&origin=FACETED_SEARCH&network=%5B%22F%22%2C%22S%22%5D
 ```
 
-Example for "Aircall":
-```
-https://www.linkedin.com/search/results/people/?keywords=my%20connections%20who%20currently%20work%20at%20aircall&origin=FACETED_SEARCH&network=%5B%22F%22%2C%22S%22%5D
-```
-
-The `network` filter restricts to 1st (`F`) and 2nd (`S`) degree. Past 2nd degree is useless.
-The semantic query "my connections who currently work at" narrows to current employees, which
-is significantly more useful than a plain company name search.
-
-1. Navigate to the search URL (with safety protocol — delay + scroll)
-2. `browser_snapshot` to capture results
-3. Record every person: name, title, connection degree, mutual connections shown
-4. **Page through ALL results**: Look for a "Next" button or pagination. For each additional page:
-   - Navigate to `google.com` as breather (wait 2000-3000ms)
-   - Navigate to the next page URL (with safety protocol — full delay + scroll)
-   - `browser_snapshot` and record all results
-   - Continue until no more pages or you hit the **hard cap of 8 LinkedIn page loads** for
-     this step (covering ~80 results, which is comprehensive for most companies)
-5. **NEVER click into individual profiles** — only read what's visible on search results pages
-6. Navigate to `google.com` to end LinkedIn browsing
+1. Navigate (with safety protocol — delay + scroll), `browser_snapshot`, record every person: name, title, degree, mutual connections
+2. **Page through ALL results**: For each additional page, navigate via `google.com` breather, snapshot and record all results. Continue until no more pages or **hard cap of 8 LinkedIn page loads** for this step.
+3. **NEVER click into individual profiles**
+4. Navigate to `google.com` to end LinkedIn browsing
 
 #### Step 2: Pull warmth scores from Knowledge Graph
 
-Before doing any strategic analysis, query the local KG to get warmth scores for 1st-degree
-connections at this company:
-
 ```bash
-python3 ~/workspace/agent-tools/skills/job-search-kg/scripts/query_connections.py "<Company Name>"
+python3 ~/workspace/agent-tools/skills/job-search/scripts/query_connections.py "<Company Name>"
 ```
 
-(See the `job-search-kg` sub-skill for knowledge graph setup and ingestion.)
-
-This returns 1st-degree connections currently listed at the company, ranked by warmth score.
-Use these scores to calibrate Tier 1 assignments in the next step:
-- **Score > 20**: genuinely warm — real interaction history, high likelihood of response
-- **Score 10–20**: mild warmth — some tenure or occasional contact, treat as a soft tie
-- **Score < 10**: cold — 1st-degree in name only, treat like a 2nd-degree for outreach purposes
-
-If the query returns no results, that's expected — it only matches connections who currently
-list the company name exactly as it appears in their LinkedIn profile. The LinkedIn live
-search (Step 1) is authoritative for who's actually there.
+Returns 1st-degree connections at the company ranked by warmth score. See `references/knowledge-graph.md` for score interpretation and setup. If the KG hasn't been set up, skip this step and note it in the output.
 
 #### Step 3: Cross-reference with hiring team
 
-Pull in the hiring team members identified in Stage 1 (from `jobs/<id>/job-posting.md`).
-Note which hiring team members appeared in the search results and at what degree.
+Pull hiring team from `jobs/<id>/job-posting.md`. Note which members appeared in search results and at what degree.
 
-#### Step 4: Strategic analysis and outreach plan
+#### Step 4: Strategic analysis
 
-With the complete map of connections and warmth scores in hand, do a deep analysis.
-For EVERY person found, assess:
-- **Relevance**: Are they on the hiring team's org? Adjacent team? Different department?
-- **Seniority**: Peer-level IC, senior IC, manager, director, VP?
-- **Connection strength**: 1st-degree (direct, with warmth score from KG), or 2nd-degree (who are the mutual connections?)
-- **Outreach value**: How likely are they to be able and willing to refer?
+For every person found, assess relevance, seniority, connection strength, and outreach value. Categorize into tiers and rank all of them — not just top 2-3:
 
-Then categorize into tiers:
+**Tier 1 — Warm 1st-degree**: Best path. Ask them to intro or submit a referral. Higher warmth score = higher confidence.
+**Tier 2 — Peer ICs on same/adjacent team**: Best direct outreach. Peer-to-peer feels natural; most companies give referral bonuses.
+**Tier 3 — Hiring manager**: High value, handle carefully. Lead with genuine curiosity about what they're building — not "I applied." Only recommend if there's a credible angle (shared background, specific technical question).
+**Tier 4 — Adjacent department**: Intel only. Low referral conversion.
 
-**Tier 1 — Warm intro through 1st-degree (highest value):**
-A 1st-degree connection who can introduce the user or submit a referral. This is almost always
-stronger than cold outreach to a 2nd-degree. A message from a mutual carries social proof
-and creates obligation to at least look. The mutual can also provide intel on the team,
-hiring process, and whether the role is genuinely open.
-
-**Tier 2 — Peer-level ICs on the same or adjacent team (best direct outreach):**
-Engineers or ICs at the user's level or one above, on the team the role belongs to or a
-neighboring team. They understand the role, can speak credibly about fit, and most companies
-give referral bonuses. Peer-to-peer conversation feels natural, not like asking a favor.
-These are the best targets for direct outreach if no strong 1st-degree path exists.
-
-**Tier 3 — The hiring manager (high value, handle with care):**
-If the hiring manager is visible (e.g., from the Hiring Team section of the job posting),
-reaching out can be powerful but framing is critical. Do NOT lead with "I applied for your
-role." Lead with genuine curiosity about what they're building — a thoughtful question about
-their team's direction. If the conversation goes well, they will often say "you should apply"
-or connect the user with recruiting. This is the strongest outcome because it becomes a pull
-rather than a push. Only recommend this path if the user can craft an insightful, non-generic opener.
-
-**Tier 4 — Adjacent department (low conversion, low risk):**
-People in other departments (product, other engineering teams). Good for intel-gathering
-but unlikely to lead directly to a referral.
-
-When writing the outreach plan:
-- **1st-degree connections**: Recommend asking them casually about the role and whether
-  they'd be comfortable making an intro or submitting a referral.
-- **2nd-degree connections**: Recommend conversational openers — never ask for a referral
-  in the first message. Lead with interest in their work or the team.
-- **Hiring manager**: Only recommend direct outreach if there's a credible angle (shared
-  background, specific question about their technical direction). Suggest researching
-  anything they've published or spoken about first.
-- **Always recommend applying regardless** — don't gate the application on getting a referral.
-  The referral is a booster, not a prerequisite. Apply now, work connections in parallel.
-- **Rank all recommendations** — don't just pick the top 2-3. Rank every viable connection
-  so the user can work down the list.
+Outreach principles:
+- 1st-degree: ask casually about the role and whether they'd make an intro or submit a referral
+- 2nd-degree: conversational opener only — never ask for a referral in the first message
+- Hiring manager: research anything they've published or spoken about first
+- Always recommend applying regardless — referral is a booster, not a gate
 
 #### Step 5: Save and update tracker
 
-Save findings to `jobs/<id>/connections.md` (see template below). Update tracker:
-`referral_contact` with top recommendation, `referral_status=identified`, advance `stage`
-to `connections_found`.
-
-#### connections.md Template
-
-```markdown
-# Connections at <Company>
-
-## 1st Degree Connections
-- <name> — <title>
-- ...
-
-(or "None found" if empty)
-
-## 2nd Degree Connections (complete list)
-- <name> — <title> | Mutual: <mutual connection names>
-- <name> — <title> | Mutual: <mutual connection names>
-- ...
-
-(<N> total across <M> pages of results)
-
-## Hiring Team (from job posting)
-- <name> — <title> (<connection degree, if found in search>)
-
-## Outreach Strategy
-
-### Recommended Actions (ranked by priority)
-
-**1. [Tier] [Approach]: [Name] — [Title]**
-- Why: <why this person is a high-value target — team relevance, seniority fit, mutual strength>
-- Approach: <specific suggested approach — what to say, how to frame it>
-- Draft message:
-  > <a short, natural-sounding message the user can copy and adapt>
-
-**2. [Tier] [Approach]: [Name] — [Title]**
-- Why: ...
-- Approach: ...
-- Draft message:
-  > ...
-
-(continue for ALL viable connections, ranked — not just top 3)
-
-### Strategic Summary
-- Best path to referral: <1-2 sentence summary of the strongest play>
-- Backup paths: <alternative approaches if the primary doesn't pan out>
-- Key insight: <any non-obvious observation — e.g., "3 mutual connections with Person X
-  suggests a strong tie worth leveraging", "hiring manager previously worked at Company Y
-  where the user also worked", "no strong 1st-degree path — peer outreach is the best bet">
-- Reminder: Apply regardless. Referral is a booster, not a gate.
-```
+Save to `jobs/<id>/connections.md` using the template in `references/knowledge-graph.md`.
+Update tracker: `referral_contact` with top recommendation, `referral_status=identified`, `stage=connections_found`.
 
 **Stage 6: Finalize & Push**
 
-1. Verify all artifacts exist:
-   - `jobs/<id>/job-posting.md`
-   - `jobs/<id>/application-form.md`
-   - `jobs/<id>/application-responses.md`
-   - `jobs/<id>/connections.md`
-   - Resume PDF on branch `job/<id>`
-2. Update tracker: advance `stage` to `ready_to_apply`
-3. Commit and push everything in the job-search repo:
+1. Verify all artifacts exist: `job-posting.md`, `application-form.md`, `application-responses.md`, `connections.md`, resume PDF on branch `job/<id>`
+2. Update tracker: `stage=ready_to_apply`
+3. Commit and push job-search repo:
    ```bash
    cd ~/workspace/job-search
    git add -A
    git commit -m "Add <company> <role> application package"
    git push
    ```
-4. Ensure resume branch was pushed (should have been in Stage 2, but verify):
-   ```bash
-   cd ~/workspace/resume
-   git push -u origin job/<id>
-   ```
-5. Print a final summary:
+4. Verify resume branch was pushed: `cd ~/workspace/resume && git push -u origin job/<id>`
+5. Print summary:
    ```
    Ready to apply: <Company> — <Role>
 
@@ -383,6 +204,15 @@ to `connections_found`.
    Both repos pushed to GitHub — resume from any device with /job-search sync
    ```
 
+### `kg` — Knowledge graph operations
+
+Read `references/knowledge-graph.md` for full setup, ingestion, and query guidance.
+
+- `kg setup` — Start ArcadeDB and run first ingestion
+- `kg ingest` — Re-ingest after a new LinkedIn export: `python3 ~/workspace/agent-tools/skills/job-search/scripts/ingest_linkedin.py --me-name "Your Name"`
+- `kg query <company>` — Query warmth scores: `python3 ~/workspace/agent-tools/skills/job-search/scripts/query_connections.py "<Company>"`
+- `kg status` — Check if ArcadeDB is running and populated
+
 ### `status` — View pipeline
 
 1. Read `tracker.csv`
@@ -391,53 +221,30 @@ to `connections_found`.
 
 ### `update <id> <stage>` — Manually update stage
 
-1. Read `tracker.csv`
-2. Find the row matching `<id>`
-3. Update `stage` to the new value
-4. Update `date_updated` to today
-5. If stage is `applied`, set `date_applied` to today
-6. Write back to CSV
-7. Commit and push:
-   ```bash
-   cd ~/workspace/job-search
-   git add tracker.csv
-   git commit -m "Update <id> stage to <stage>"
-   git push
-   ```
+1. Read `tracker.csv`, find the row, update `stage` and `date_updated`
+2. If `stage=applied`, also set `date_applied`
+3. Commit and push: `git add tracker.csv && git commit -m "Update <id> stage to <stage>" && git push`
 
 ### `sync` — Pull both repos to current device
 
-Pull the latest state of both repos so work can resume from any machine.
-
 ```bash
-# Pull job-search repo
-cd ~/workspace/job-search
-git pull --rebase
-
-# Pull resume repo (fetch all branches including job/* branches)
-cd ~/workspace/resume
-git fetch --all --prune
-git pull --rebase
+cd ~/workspace/job-search && git pull --rebase
+cd ~/workspace/resume && git fetch --all --prune && git pull --rebase
 ```
 
-Print a summary of current tracker state after sync.
+Print tracker state after sync.
 
 ### `init` — Bootstrap a new job search repo
 
-Create a fresh job search directory from scratch. Run this once when setting up on a
-new machine or for a new user.
+Create a fresh job search directory from scratch.
 
-1. Create the repo directory: `mkdir -p ~/workspace/job-search`
-2. Initialize git: `cd ~/workspace/job-search && git init`
-3. Create the tracker CSV with headers only:
+1. `mkdir -p ~/workspace/job-search && cd ~/workspace/job-search && git init`
+2. Create tracker with headers:
    ```bash
    echo "id,company,role,url,stage,resume_branch,role_branch,application_url,referral_contact,referral_status,date_found,date_applied,date_updated,notes" > tracker.csv
    ```
-4. Create required directories:
-   ```bash
-   mkdir -p jobs data/linkedin
-   ```
-5. Create `CLAUDE.md` with this content:
+3. Create directories: `mkdir -p jobs data/linkedin`
+4. Create `CLAUDE.md`:
    ```markdown
    # Job Search Pipeline
 
@@ -450,42 +257,36 @@ new machine or for a new user.
    See the `job-search` skill's `references/linkedin-safety.md` for full protocol.
 
    ## Knowledge Graph (ArcadeDB)
-   - **LinkedIn export data**: `data/linkedin/` (Connections.csv, Messages.csv, Positions.csv, Education.csv)
-   - **Setup & scripts**: See the `job-search-kg` skill
+   - **Data**: `data/linkedin/` (Connections.csv, Messages.csv, Positions.csv, Education.csv)
+   - **Setup & scripts**: Run `/job-search kg setup`
+   - **Query**: `python3 ~/workspace/agent-tools/skills/job-search/scripts/query_connections.py "<Company>"`
+   - **Ingest**: `python3 ~/workspace/agent-tools/skills/job-search/scripts/ingest_linkedin.py --me-name "Your Name"`
    ```
-6. Create `profile.md` with the template (see `setup` sub-command below)
-7. Create an initial git commit:
-   ```bash
-   git add -A && git commit -m "Initialize job search pipeline"
-   ```
-8. Prompt the user to create a private GitHub repo and push:
+5. Create `profile.md` with the template in the `setup` sub-command below
+6. Initial commit: `git add -A && git commit -m "Initialize job search pipeline"`
+7. Create private GitHub repo and push:
    ```bash
    gh repo create job-search --private --source=. --push
    ```
-   Or manually: add remote and push.
-9. Print next steps:
+8. Print next steps:
    ```
    Job search repo initialized at ~/workspace/job-search
 
    Next steps:
-   1. Run /job-search setup   — configure browser automation
-   2. Run /job-search-kg setup — set up connection knowledge graph (requires LinkedIn export)
-   3. Run /job-search add <linkedin-url>  — start processing jobs
+   1. /job-search setup     — configure browser automation
+   2. /job-search kg setup  — set up connection knowledge graph
+   3. /job-search add <url> — start processing jobs
    ```
 
 ### `setup` — Configure browser automation
 
-Walk the user through choosing and configuring their browser MCP server. Read
-`references/browser-setup.md` for the full setup instructions, then:
+Read `references/browser-setup.md` for full setup instructions, then:
 
-1. Ask the user which option they prefer:
-   - **browsermcp** — Simpler, uses their real browser. No file uploads.
-   - **Dockerized Playwright + noVNC** — Full automation including file uploads. Requires Docker.
-2. Walk them through the setup steps from the reference doc for their chosen option.
-3. Verify the MCP server is working by calling `browser_navigate` to `https://google.com`
-   and confirming `browser_snapshot` returns content.
-4. If using Docker: confirm noVNC is accessible at http://localhost:6080.
-5. Create `~/workspace/job-search/profile.md` if it doesn't exist, with the template:
+1. Ask the user: **browsermcp** (simpler, no file uploads) or **Dockerized Playwright + noVNC** (full automation, requires Docker)?
+2. Walk through setup from the reference doc for their chosen option
+3. Verify by calling `browser_navigate` to `https://google.com` and confirming `browser_snapshot` returns content
+4. If Docker: confirm noVNC accessible at http://localhost:6080
+5. Create `~/workspace/job-search/profile.md` if it doesn't exist:
    ```markdown
    # Application Profile
 
@@ -515,7 +316,7 @@ Walk the user through choosing and configuring their browser MCP server. Read
    - Race:
    - Veteran status:
    ```
-6. Ask the user to fill in their details (or confirm existing ones).
+6. Ask the user to fill in their details (or confirm existing ones)
 
 ## CSV Read/Write
 
@@ -524,11 +325,9 @@ Walk the user through choosing and configuring their browser MCP server. Read
 ```bash
 # Read and display tracker
 python3 -c "
-import csv, sys
-with open('~/workspace/job-search/tracker.csv') as f:
-    reader = csv.DictReader(f)
-    for row in reader:
-        print(dict(row))
+import csv
+with open('tracker.csv') as f:
+    for row in csv.DictReader(f): print(dict(row))
 "
 ```
 
@@ -536,76 +335,50 @@ with open('~/workspace/job-search/tracker.csv') as f:
 # Add a row
 python3 -c "
 import csv
-row = {
-    'id': 'PLACEHOLDER',
-    'company': 'PLACEHOLDER',
-    # ... fill all fields
-}
-with open('~/workspace/job-search/tracker.csv', 'a', newline='') as f:
-    writer = csv.DictWriter(f, fieldnames=['id','company','role','url','stage','resume_branch','role_branch','application_url','referral_contact','referral_status','date_found','date_applied','date_updated','notes'])
-    writer.writerow(row)
+row = {'id':'PLACEHOLDER','company':'PLACEHOLDER','role':'','url':'','stage':'discovered',
+       'resume_branch':'','role_branch':'','application_url':'','referral_contact':'',
+       'referral_status':'','date_found':'TODAY','date_applied':'','date_updated':'TODAY','notes':''}
+with open('tracker.csv','a',newline='') as f:
+    csv.DictWriter(f,fieldnames=list(row)).writerow(row)
 "
 ```
 
 ```bash
-# Update a field in an existing row
+# Update a field
 python3 -c "
 import csv
-rows = []
-with open('~/workspace/job-search/tracker.csv') as f:
-    reader = csv.DictReader(f)
-    fieldnames = reader.fieldnames
-    for row in reader:
-        if row['id'] == 'TARGET_ID':
-            row['stage'] = 'NEW_STAGE'
-            row['date_updated'] = 'TODAY'
+rows=[]
+with open('tracker.csv') as f:
+    r=csv.DictReader(f); fields=r.fieldnames
+    for row in r:
+        if row['id']=='TARGET_ID': row['stage']='NEW_STAGE'; row['date_updated']='TODAY'
         rows.append(row)
-with open('~/workspace/job-search/tracker.csv', 'w', newline='') as f:
-    writer = csv.DictWriter(f, fieldnames=fieldnames)
-    writer.writeheader()
-    writer.writerows(rows)
+with open('tracker.csv','w',newline='') as f:
+    w=csv.DictWriter(f,fieldnames=fields); w.writeheader(); w.writerows(rows)
 "
 ```
 
 ## Application Form Defaults
 
-Personal details for pre-filling application forms are stored in the **private** job-search
-repo at `~/workspace/job-search/profile.md`. Read that file before filling any
-application form. It contains contact info, links, work authorization, EEO responses, and
-other standard fields.
-
-**NEVER put personal details in this skill file** — it lives in a public repo.
+Personal details for pre-filling application forms live at `~/workspace/job-search/profile.md`.
+Read that file before filling any form. **NEVER put personal details in this skill file.**
 
 ### Form-Filling Strategy
 
-1. **Resume upload**:
-   - **Dockerized Playwright**: Use the `browser_file_upload` tool with the file path
-     `/home/pwuser/resume/resume.pdf` (the resume repo is mounted into the container).
-   - **browsermcp**: Cannot do file uploads. Prompt the user to upload `resume.pdf` manually.
-2. **"Apply with LinkedIn" button**: If present on a Lever/Greenhouse form, clicking this
-   can prefill name, email, phone, location, company, and LinkedIn URL — saving significant
-   time. However, it triggers an OAuth popup that may not work reliably. Worth trying first;
-   fall back to manual field entry if it fails.
-3. **Dropdowns**: Lever's custom dropdowns (combobox style) don't work with
-   `browser_select_option`. Use click-then-ArrowDown-key instead (click the combobox, press
-   ArrowDown to navigate, Enter to select). Standard HTML `<select>` elements (like EEO
-   dropdowns) do work with `browser_select_option` using the visible option text as the value.
-4. **Location autocomplete**: Lever's location field is a Google Places autocomplete. Type
-   the city name only (e.g., "Portland"), wait for suggestions to load, then press ArrowDown
-   and Enter to select. Typing the full "City, State" often causes the autocomplete to clear
-   on blur.
-5. **Stale refs**: After each `browser_type` or `browser_click`, the page snapshot refs
-   update. Always use refs from the most recent snapshot — parallel field fills will fail
-   with stale ref errors. Fill fields sequentially.
+1. **Resume upload**: Dockerized Playwright: `browser_file_upload` with `/home/pwuser/resume/resume.pdf`. browsermcp: prompt the user to upload manually.
+2. **"Apply with LinkedIn"**: Worth trying — can prefill name/email/phone/location/LinkedIn. OAuth popup may fail; fall back to manual entry.
+3. **Dropdowns**: Lever's combobox dropdowns don't work with `browser_select_option`. Use click → ArrowDown → Enter. Standard HTML `<select>` (e.g., EEO fields) work with `browser_select_option`.
+4. **Location autocomplete**: Type city name only (e.g., "Portland"), wait for suggestions, ArrowDown + Enter. Full "City, State" often clears on blur.
+5. **Stale refs**: After each `browser_type` or `browser_click`, refs update. Always use refs from the most recent snapshot. Fill fields sequentially.
 
 ## Important Rules
 
-1. **Run end-to-end without pausing.** Do not stop to ask for user confirmation between stages. The user reviews everything after the pipeline completes.
-2. **LinkedIn safety is non-negotiable.** Read `references/linkedin-safety.md` before any browser interaction with LinkedIn.
+1. **Run end-to-end without pausing.** The user reviews everything after the pipeline completes.
+2. **LinkedIn safety is non-negotiable.** Read `references/linkedin-safety.md` before any LinkedIn browsing.
 3. **Never automate** connection requests, messages, or application submissions on LinkedIn.
 4. **Always read `resume/CONTEXT.md`** before modifying resume content.
 5. **Use `_publish`** after every resume edit, and commit the generated artifacts.
-6. **Always push both repos** at the end of a pipeline run so work is resumable from any device.
-7. **Draft application responses** for any written questions — the user should be able to copy-paste these into the application form with minimal editing.
-8. **Never submit applications automatically.** Fill out every field, then stop. The user clicks Submit.
-9. **No PII in this skill file.** All personal details live in the private job-search repo (`profile.md`).
+6. **Always push both repos** at the end of a pipeline run.
+7. **Draft application responses** for any written questions.
+8. **Never submit applications automatically.** Fill everything, then stop. User clicks Submit.
+9. **No PII in this skill file.** All personal details live in the private job-search repo.
