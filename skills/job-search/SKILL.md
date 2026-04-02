@@ -129,10 +129,16 @@ Walk through the full pipeline for a new job posting end-to-end.
 5. Read `resume.md` and the saved job description
 6. Tailor `resume.md`: adjust Summary, reorder/emphasize bullets, update Skills, compress less-relevant experience. Keep ATS-friendly formatting (see `resume/AGENTS.md`)
 7. Run `./_publish` to generate HTML and PDF
-8. `git add -A && git commit -m "Tailor resume for <company> <role>"`
-9. `git push -u origin job/<id>`
-10. `xdg-open resume.pdf`
-11. Update tracker: `resume_branch=job/<id>`, `role_branch=<base>`, `stage=resume_tailored`
+8. Copy the PDF into the job directory with a descriptive filename:
+   ```bash
+   cp ~/workspace/resume/resume.pdf \
+      ~/workspace/job-search/jobs/<id>/"Resume - Jack Senechal - <role>.pdf"
+   ```
+   Use the actual job title for `<role>` (e.g. `Platform Engineer`, `Staff Software Engineer`).
+9. `git add -A && git commit -m "Tailor resume for <company> <role>"`
+10. `git push -u origin job/<id>`
+11. `xdg-open ~/workspace/job-search/jobs/<id>/"Resume - Jack Senechal - <role>.pdf"`
+12. Update tracker: `resume_branch=job/<id>`, `role_branch=<base>`, `stage=resume_tailored`
 
 **Stage 3: Prep Application**
 
@@ -220,7 +226,7 @@ Update tracker: `referral_contact` with top recommendation, `referral_status=ide
 
 **Stage 6: Finalize & Push**
 
-1. Verify all artifacts exist: `job-posting.md`, `glassdoor.md`, `application-form.md`, `application-responses.md`, `connections.md`, resume PDF on branch `job/<id>`
+1. Verify all artifacts exist: `job-posting.md`, `glassdoor.md`, `application-form.md`, `application-responses.md`, `connections.md`, `Resume - Jack Senechal - <role>.pdf` in `jobs/<id>/`
 2. Update tracker: `stage=ready_to_apply`
 3. Commit and push job-search repo:
    ```bash
@@ -240,8 +246,8 @@ Update tracker: `referral_contact` with top recommendation, `referral_status=ide
    Research: job-search/jobs/<id>/
 
    Files to review before applying:
-   - jobs/<id>/application-responses.md  (edit your written answers)
-   - resume.pdf                          (on branch job/<id>)
+   - jobs/<id>/application-responses.md              (edit your written answers)
+   - jobs/<id>/Resume - Jack Senechal - <role>.pdf   (ready to upload)
 
    Both repos pushed to GitHub — resume from any device with /job-search sync
    ```
