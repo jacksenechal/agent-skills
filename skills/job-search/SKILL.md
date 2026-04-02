@@ -30,10 +30,11 @@ will review artifacts after the run completes.
 This skill requires an MCP server providing Playwright-style browser tools
 (`browser_navigate`, `browser_snapshot`, `browser_click`, `browser_type`, etc.).
 
-- **browsermcp** — Controls the user's real desktop browser. Simplest setup. Cannot do file uploads.
-- **Dockerized Playwright + noVNC** — Headless Chromium in Docker. Supports file uploads, persistent LinkedIn sessions. Recommended for full automation.
+**Default**: Dockerized Playwright via the `/playwright-docker` skill — persistent sessions,
+file uploads, real-time noVNC monitoring. Run `/playwright-docker setup` if not yet configured.
 
-Run `/job-search setup` to configure. See `references/browser-setup.md` for detailed setup instructions.
+**Fallback**: browsermcp — controls your real desktop browser. No Docker required, but cannot
+do file uploads. See `references/browser-setup.md` for fallback setup instructions.
 
 ## Knowledge Graph
 
@@ -308,13 +309,10 @@ Create a fresh job search directory from scratch.
 
 ### `setup` — Configure browser automation
 
-Read `references/browser-setup.md` for full setup instructions, then:
-
-1. Ask the user: **browsermcp** (simpler, no file uploads) or **Dockerized Playwright + noVNC** (full automation, requires Docker)?
-2. Walk through setup from the reference doc for their chosen option
-3. Verify by calling `browser_navigate` to `https://google.com` and confirming `browser_snapshot` returns content
-4. If Docker: confirm noVNC accessible at http://localhost:6080
-5. Create `~/workspace/job-search/profile.md` if it doesn't exist:
+1. Run `/playwright-docker setup` to configure Dockerized Playwright (recommended). If the
+   user cannot or does not want Docker, fall back to browsermcp — see `references/browser-setup.md`.
+2. Verify by calling `browser_navigate` to `https://google.com` and confirming `browser_snapshot` returns content.
+3. Create `~/workspace/job-search/profile.md` if it doesn't exist:
    ```markdown
    # Application Profile
 
@@ -393,7 +391,7 @@ Read that file before filling any form. **NEVER put personal details in this ski
 
 ### Form-Filling Strategy
 
-1. **Resume upload**: Dockerized Playwright: `browser_file_upload` with `/home/pwuser/resume/resume.pdf`. browsermcp: prompt the user to upload manually.
+1. **Resume upload**: Playwright Docker: `browser_file_upload` with `/home/pwuser/resume/resume.pdf`. browsermcp: prompt the user to upload manually.
 2. **"Apply with LinkedIn"**: Worth trying — can prefill name/email/phone/location/LinkedIn. OAuth popup may fail; fall back to manual entry.
 3. **Dropdowns**: Lever's combobox dropdowns don't work with `browser_select_option`. Use click → ArrowDown → Enter. Standard HTML `<select>` (e.g., EEO fields) work with `browser_select_option`.
 4. **Location autocomplete**: Type city name only (e.g., "Portland"), wait for suggestions, ArrowDown + Enter. Full "City, State" often clears on blur.
