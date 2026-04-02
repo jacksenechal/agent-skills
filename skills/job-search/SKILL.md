@@ -36,6 +36,19 @@ file uploads, real-time noVNC monitoring. Run `/playwright-docker setup` if not 
 **Fallback**: browsermcp — controls your real desktop browser. No Docker required, but cannot
 do file uploads. See `references/browser-setup.md` for fallback setup instructions.
 
+## Agent Architecture
+
+Browser research (scraping, form discovery, LinkedIn search) is mechanical work that
+consumes context and doesn't benefit from expensive models. Offload it to a cheap subagent;
+keep the main thread for synthesis, resume tailoring, response drafting, and decisions.
+
+**Pattern**: spawn a `haiku` subagent (or `sonnet` for multi-step LinkedIn work) via the
+Agent tool. Give it: the URL(s), exact fields to extract, and a requirement to return
+verbatim text — no summarization. The main thread receives the raw data and does all writing.
+
+Stages that use subagents: **1** (job posting + Glassdoor), **3** (form discovery),
+**5** (LinkedIn connection search).
+
 ## Knowledge Graph
 
 A local ArcadeDB graph of LinkedIn connections ranked by warmth. Used in Stage 5 to
@@ -53,10 +66,10 @@ Walk through the full pipeline for a new job posting end-to-end.
 1. Generate an `id` slug (e.g., `stripe-infra-eng`, `aircall-ai-eng`). Short, semantic, unique. Do NOT ask the user.
 2. Create `~/workspace/job-search/jobs/<id>/`
 3. Add row to `tracker.csv`: `stage=discovered`, `date_found=today`
-4. Scrape the job posting:
-   - **Use `browser_snapshot` as the primary method.** Navigate following the safety protocol, then snapshot to capture the full accessibility tree — verbatim text, application URLs, hiring team. No summarization.
-   - `WebFetch` is a fallback only — it summarizes and misses application URLs and hiring team.
-   - Parse: company, role, full description, external application URL, location, requirements, hiring team (names, titles, connection degree)
+4. Scrape the job posting via a **haiku subagent**:
+   - Spawn an Agent (model: haiku) with the task: "Navigate to `<linkedin-url>` following the LinkedIn safety protocol (see `references/linkedin-safety.md`). Use `browser_snapshot` to capture the full accessibility tree. Return the verbatim snapshot text — company, role, full description, application URL, location, requirements, hiring team (names, titles, connection degree). Do not summarize."
+   - `WebFetch` is a fallback if browser tools are unavailable — it summarizes and misses application URLs.
+   - The subagent returns raw extracted text; the main thread parses and structures it.
 5. Save to `jobs/<id>/job-posting.md`:
    ```markdown
    # <Company> — <Role>
@@ -78,11 +91,10 @@ Walk through the full pipeline for a new job posting end-to-end.
    ## Notes
    <initial observations on fit, concerns>
    ```
-6. Research company on Glassdoor:
-   - Navigate to `https://www.glassdoor.com/Search/results.htm?keyword=<URL-encoded-company-name>` (no LinkedIn safety delays needed — this is not LinkedIn)
-   - `browser_snapshot` the search results, click through to the company's Reviews page
-   - `browser_snapshot` the Reviews overview to capture: overall rating, CEO approval, "recommend to a friend" %, and the pros/cons summary
-   - Scroll down and snapshot to capture more review highlights if available
+6. Research company on Glassdoor via a **haiku subagent**:
+   - Spawn an Agent (model: haiku) with the task: "Navigate to `https://www.glassdoor.com/Search/results.htm?keyword=<URL-encoded-company-name>`. Snapshot results, click through to the company's Reviews page, snapshot the overview. Scroll and snapshot to capture more highlights. Return verbatim: overall rating, CEO approval %, recommend-to-friend %, pros/cons summary, and 2-3 notable review snippets. Do not summarize."
+   - The subagent returns raw text; the main thread writes `glassdoor.md` and synthesizes takeaways.
+   - If the company isn't found on Glassdoor, the subagent notes that and returns.
    - Save to `jobs/<id>/glassdoor.md`:
      ```markdown
      # Glassdoor — <Company>
@@ -124,8 +136,10 @@ Walk through the full pipeline for a new job posting end-to-end.
 
 **Stage 3: Prep Application**
 
-1. If `application_url` exists: `WebFetch` the page, identify all form fields
-2. If not: use browser tools to find the Apply button and capture the URL
+1. Discover and enumerate the application form via a **haiku subagent**:
+   - Spawn an Agent (model: haiku) with the task: "Navigate to `<application_url>` (or if unknown, to the job posting page and find the Apply button). Snapshot the full application form. Return verbatim: every field name, type, whether required or optional, all essay/written questions, and what file uploads are required. Identify the platform (Greenhouse/Lever/Workday/etc). Do not summarize."
+   - If no `application_url` is known, have the subagent navigate the job posting and capture the Apply URL first.
+2. Main thread uses the subagent's output to write `jobs/<id>/application-form.md`.
 3. Save to `jobs/<id>/application-form.md`:
    ```markdown
    # Application Form — <Company> <Role>
@@ -160,18 +174,17 @@ For any written questions or essays identified in Stage 3:
 
 **READ `references/linkedin-safety.md` BEFORE THIS STAGE.**
 
-#### Step 1: Search connections via semantic query
+#### Step 1: Search connections via a **sonnet subagent**
 
-Use a single conversational search that finds 1st and 2nd degree connections at the company:
+Use `sonnet` (not haiku) for LinkedIn — the safety protocol requires careful multi-step
+judgment that haiku may not handle reliably.
 
-```
-https://www.linkedin.com/search/results/people/?keywords=my%20connections%20who%20currently%20work%20at%20<URL-ENCODED-COMPANY>&origin=FACETED_SEARCH&network=%5B%22F%22%2C%22S%22%5D
-```
+Spawn an Agent (model: sonnet) with the task:
+> "Search LinkedIn for connections at `<Company>`. Read `references/linkedin-safety.md` first and follow the protocol exactly. Use this URL:
+> `https://www.linkedin.com/search/results/people/?keywords=my%20connections%20who%20currently%20work%20at%20<URL-ENCODED-COMPANY>&origin=FACETED_SEARCH&network=%5B%22F%22%2C%22S%22%5D`
+> Page through ALL results (max 8 LinkedIn page loads total, use google.com as breather between pages). For each person found, return: name, title, connection degree, mutual connections. NEVER click individual profiles. End by navigating to google.com. Return the full list verbatim."
 
-1. Navigate (with safety protocol — delay + scroll), `browser_snapshot`, record every person: name, title, degree, mutual connections
-2. **Page through ALL results**: For each additional page, navigate via `google.com` breather, snapshot and record all results. Continue until no more pages or **hard cap of 8 LinkedIn page loads** for this step.
-3. **NEVER click into individual profiles**
-4. Navigate to `google.com` to end LinkedIn browsing
+The subagent returns the raw person list; the main thread does all cross-referencing and strategic analysis.
 
 #### Step 2: Pull warmth scores from Knowledge Graph
 
