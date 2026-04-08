@@ -67,7 +67,7 @@ Walk through the full pipeline for a new job posting end-to-end.
 2. Create `~/workspace/job-search/jobs/<id>/`
 3. Add row to `tracker.csv`: `stage=discovered`, `date_found=today`
 4. Scrape the job posting via a **haiku subagent**:
-   - Spawn an Agent (model: haiku) with the task: "Navigate to `<linkedin-url>` following the LinkedIn safety protocol (see `references/linkedin-safety.md`). Use `browser_snapshot` to capture the full accessibility tree. Return the verbatim snapshot text — company, role, full description, application URL, location, requirements, hiring team (names, titles, connection degree). Do not summarize."
+   - Spawn an Agent (model: haiku) with the task: "Navigate to `<linkedin-url>` following the LinkedIn safety protocol (see `references/linkedin-safety.md`). Use `browser_snapshot` to capture the full accessibility tree. CAPTCHA RULE: if any snapshot shows a CAPTCHA or security challenge, STOP, navigate to google.com, and return 'CAPTCHA_DETECTED'. Otherwise, return the verbatim snapshot text — company, role, full description, application URL, location, requirements, hiring team (names, titles, connection degree). Do not summarize."
    - `WebFetch` is a fallback if browser tools are unavailable — it summarizes and misses application URLs.
    - The subagent returns raw extracted text; the main thread parses and structures it.
 5. Save to `jobs/<id>/job-posting.md`:
@@ -92,7 +92,7 @@ Walk through the full pipeline for a new job posting end-to-end.
    <initial observations on fit, concerns>
    ```
 6. Research company on Glassdoor via a **haiku subagent**:
-   - Spawn an Agent (model: haiku) with the task: "Navigate to `https://www.glassdoor.com/Search/results.htm?keyword=<URL-encoded-company-name>`. Snapshot results, click through to the company's Reviews page, snapshot the overview. Scroll and snapshot to capture more highlights. Return verbatim: overall rating, CEO approval %, recommend-to-friend %, pros/cons summary, and 2-3 notable review snippets. Do not summarize."
+   - Spawn an Agent (model: haiku) with the task: "Navigate to `https://www.glassdoor.com/Search/results.htm?keyword=<URL-encoded-company-name>`. Snapshot results, click through to the company's Reviews page, snapshot the overview. Scroll and snapshot to capture more highlights. CAPTCHA RULE: if any snapshot shows a CAPTCHA or security challenge, STOP, navigate to google.com, and return 'CAPTCHA_DETECTED'. Otherwise, return verbatim: overall rating, CEO approval %, recommend-to-friend %, pros/cons summary, and 2-3 notable review snippets. Do not summarize."
    - The subagent returns raw text; the main thread writes `glassdoor.md` and synthesizes takeaways.
    - If the company isn't found on Glassdoor, the subagent notes that and returns.
    - Save to `jobs/<id>/glassdoor.md`:
@@ -117,7 +117,6 @@ Walk through the full pipeline for a new job posting end-to-end.
      <What to emphasize in cover letter/interviews based on what employees value;
       what concerns to probe during interviews>
      ```
-   - If the company isn't found on Glassdoor, note that in `glassdoor.md` and move on
 7. Update tracker: `company`, `role`, `application_url`, `stage=researched`
 
 **Stage 2: Tailor Resume**
@@ -143,7 +142,7 @@ Walk through the full pipeline for a new job posting end-to-end.
 **Stage 3: Prep Application**
 
 1. Discover and enumerate the application form via a **haiku subagent**:
-   - Spawn an Agent (model: haiku) with the task: "Navigate to `<application_url>` (or if unknown, to the job posting page and find the Apply button). Snapshot the full application form. Return verbatim: every field name, type, whether required or optional, all essay/written questions, and what file uploads are required. Identify the platform (Greenhouse/Lever/Workday/etc). Do not summarize."
+   - Spawn an Agent (model: haiku) with the task: "Navigate to `<application_url>` (or if unknown, to the job posting page and find the Apply button). Snapshot the full application form. CAPTCHA RULE: if any snapshot shows a CAPTCHA or security challenge, STOP, navigate to google.com, and return 'CAPTCHA_DETECTED'. Otherwise, return verbatim: every field name, type, whether required or optional, all essay/written questions, and what file uploads are required. Identify the platform (Greenhouse/Lever/Workday/etc). Do not summarize."
    - If no `application_url` is known, have the subagent navigate the job posting and capture the Apply URL first.
 2. Main thread uses the subagent's output to write `jobs/<id>/application-form.md`.
 3. Save to `jobs/<id>/application-form.md`:
@@ -188,7 +187,7 @@ judgment that haiku may not handle reliably.
 Spawn an Agent (model: sonnet) with the task:
 > "Search LinkedIn for connections at `<Company>`. Read `references/linkedin-safety.md` first and follow the protocol exactly. Use this URL:
 > `https://www.linkedin.com/search/results/people/?keywords=my%20connections%20who%20currently%20work%20at%20<URL-ENCODED-COMPANY>&origin=FACETED_SEARCH&network=%5B%22F%22%2C%22S%22%5D`
-> Page through ALL results (max 8 LinkedIn page loads total, use google.com as breather between pages). For each person found, return: name, title, connection degree, mutual connections. NEVER click individual profiles. End by navigating to google.com. Return the full list verbatim."
+> Page through ALL results (max 8 LinkedIn page loads total, use google.com as breather between pages). For each person found, return: name, title, connection degree, mutual connections. NEVER click individual profiles. CAPTCHA RULE: if any snapshot shows a CAPTCHA or security challenge, STOP, navigate to google.com, and return 'CAPTCHA_DETECTED'. End by navigating to google.com. Return the full list verbatim."
 
 The subagent returns the raw person list; the main thread does all cross-referencing and strategic analysis.
 
@@ -361,7 +360,7 @@ Create a fresh job search directory from scratch.
    - Race:
    - Veteran status:
    ```
-6. Ask the user to fill in their details (or confirm existing ones)
+4. Ask the user to fill in their details (or confirm existing ones)
 
 ## CSV Read/Write
 
@@ -419,11 +418,12 @@ Read that file before filling any form. **NEVER put personal details in this ski
 ## Important Rules
 
 1. **Run end-to-end without pausing.** The user reviews everything after the pipeline completes.
-2. **LinkedIn safety is non-negotiable.** Read `references/linkedin-safety.md` before any LinkedIn browsing.
-3. **Never automate** connection requests, messages, or application submissions on LinkedIn.
-4. **Always read `resume/CONTEXT.md`** before modifying resume content.
-5. **Use `_publish`** after every resume edit, and commit the generated artifacts.
-6. **Always push both repos** at the end of a pipeline run.
-7. **Draft application responses** for any written questions.
-8. **Never submit applications automatically.** Fill everything, then stop. User clicks Submit.
-9. **No PII in this skill file.** All personal details live in the private job-search repo.
+2. **CAPTCHA = STOP.** If any `browser_snapshot` or `browser_screenshot` reveals a CAPTCHA, security challenge, "unusual activity" warning, or bot-detection interstitial on ANY site (LinkedIn, Glassdoor, Greenhouse, Lever, Workday, etc.): immediately stop all browser automation, navigate to `google.com`, and ask the user to resolve it via noVNC (http://localhost:6080/vnc.html). Wait for confirmation before resuming. Never attempt to solve or bypass a captcha. This is the ONE exception to "run without pausing."
+3. **LinkedIn safety is non-negotiable.** Read `references/linkedin-safety.md` before any LinkedIn browsing.
+4. **Never automate** connection requests, messages, or application submissions on LinkedIn.
+5. **Always read `resume/CONTEXT.md`** before modifying resume content.
+6. **Use `_publish`** after every resume edit, and commit the generated artifacts.
+7. **Always push both repos** at the end of a pipeline run.
+8. **Draft application responses** for any written questions.
+9. **Never submit applications automatically.** Fill everything, then stop. User clicks Submit.
+10. **No PII in this skill file.** All personal details live in the private job-search repo.
